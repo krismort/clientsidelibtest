@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Coinify</title>
+  <base href="/">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<script type="text/javascript">
+  function getQueryArg(name, url) {
+    if (!url) {
+      url = window.location.href;
+    }
+    name = name.replace(/[\[\]]/g, "\\$&");
+    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)");
+    var results = regex.exec(url);
+    if (!results) return null;
+    if (!results[2] && results[0] ) return results[0].replace('?','');
+    if (!results[2]) return '';
+    return decodeURIComponent(results[2].replace(/\+/g, " "));
+  }
+  function nextScreen( ) {
+    parent.postMessage( '[SC-Embed]' + JSON.stringify( { command: 'close', param: window.callbackType } ), '*' );
+  }
+  function onPageDidLoad() {
+    window.callbackType = 'unknown';
+    if ( getQueryArg('success') ) {
+      window.callbackType = 'success';
+    }
+    else if ( getQueryArg('rejected') ) {
+      window.callbackType = 'rejected';
+      let ppp_status = getQueryArg('ppp_status');
+      if ( !ppp_status || !ppp_status.length ) {
+        ppp_status = '';
+      }
+      if ( ppp_status.toLowerCase().indexOf('cancel') >= 0 ) {
+        window.callbackType = 'cancelled';
+      } else if ( ppp_status.toLowerCase().indexOf('fail') >= 0 ) {
+        window.callbackType = 'fail';
+      } 
+    }
+    else if ( getQueryArg('cancelled') ) {
+      window.callbackType = 'cancelled';
+    }
+    window.setTimeout( () => {
+      nextScreen();
+    }, 500 );
+  }
+</script>
+
+<body>
+  <script type="text/javascript">
+    onPageDidLoad();
+  </script>
+</body>
+</html>
