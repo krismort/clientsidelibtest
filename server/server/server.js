@@ -162,7 +162,12 @@ app.use(bodyParser.urlencoded({ // to support URL-encoded bodies
 
 const currentUser = {
   userTokenId: "coinify-userid",
-  clientRequestId: 'transction1'
+  clientRequestId: 'transction1',
+  lastOrder: {
+    amount: null,
+    reference: null,
+    currency: null
+  }
 };
 
 
@@ -285,10 +290,16 @@ PSP.GetSessionToken = function( cb ) {
   } );
 };
 
-PSP.Payment = function( UPOId, cb ) {
-  console.log("Payment...");
+PSP.CreatePayment = function( UPOId, cb ) {
+  console.log("CreatePayment...");
   PSP.safecharge.getSessionToken().then( session => {
     console.error( "Got session for Payment ", session );
+
+    currentUser.lastOrder = {
+      amount: '100',
+      reference: 'test-' + Math.round(Math.random() * 1000),
+      currency: 'EUR'
+    };
 
     const opts = {
       sessionToken: session.sessionToken,
@@ -311,9 +322,9 @@ PSP.Payment = function( UPOId, cb ) {
         email: 'john.doe@gmail.se',
       },
       transaction: {
-        amount: '100',
-        reference: 'test-' + Math.round(Math.random() * 1000),
-        currency: 'EUR'
+        amount: currentUser.lastOrder.amount,
+        reference: currentUser.lastOrder.reference,
+        currency: currentUser.lastOrder.currency
       },
       userPaymentOption: {
         userPaymentOptionId: UPOId,
@@ -329,76 +340,56 @@ PSP.Payment = function( UPOId, cb ) {
   } ).catch ( e => {
     console.error( "ERROR ", e );
   } );
-
-/*    !arrDynamic3DParams.clientUniqueId || !arrDynamic3DParams.notificationUrl || !arrDynamic3DParams.deviceDetails.deviceType ||
-    !arrDynamic3DParams.transaction.amount || !arrDynamic3DParams.deviceDetails.deviceName || !arrDynamic3DParams.transaction.currency || !arrDynamic3DParams.deviceDetails.deviceOS ||
-    !arrDynamic3DParams.transaction.reference || !arrDynamic3DParams.deviceDetails.browser || !arrDynamic3DParams.deviceDetails.ipAddress ||
-    !arrDynamic3DParams.billingAddress.firstName || !arrDynamic3DParams.billingAddress.lastName || !arrDynamic3DParams.billingAddress.country || !arrDynamic3DParams.billingAddress.email
-*/
-  return;
-  const opts = {
-    clientUniqueId: currentUser.clientUniqueId,
-
-  };
-  PSP.safecharge.dynamic3D();
-
-
-  const payment = {
-    id: '4325544',
-    amount: 100,
-    currency: 'EUR'
-  };
-  
-  const options = {
-    account: {
-      referenceId: 'userid' + Math.round( Math.random() * 99999 ),
-      country: 'GB',
-      email: 'asdsa@asdasd.se'
-    },
-    tradeId: '344365648',
-    returnBaseUrl: 'http://localhost:8087/',
-    merchantId: '7583429810138495724',
-    merchantSiteId: '140263',
-    merchantSecretKey: '3212',
-    merchantHostURL: 'ppp-test.safecharge.com'
-  };
-
-  const providerDetails = {
-    callBackURL: 'http://localhost:8087/callback.html' // https://app-api.sandbox.coinify.com/card/callbacks/safecharge http://localhost:8087/'
-  };
-
-  const createSafeChargePaymentArgs = {
-    internalPaymentId: payment.id,
-    userId: options.account.referenceId,
-    amount: parseInt(payment.amount),
-    currency: payment.currency,
-    reference: 'CY' + options.tradeId,
-    billingAddress: {
-      firstName: 'Niels-Niels',
-      lastName: 'Nielsen',
-      country: options.account.country, // This is mandatory parameter for Safecharge
-      email: options.account.email
-    },
-    urlDetails: {
-      successUrl: options.returnBaseUrl + 'safecharge/callback.html?success',
-      failureUrl: options.returnBaseUrl + 'safecharge/callback.html?rejected',
-      pendingUrl: '',
-      notificationUrl: providerDetails.callBackURL,
-      backUrl: options.retureturnBaseUrlrnUrl + 'safecharge/callback.html?cancelled'
-    },
-    themeId: '185203'
-  };
-
-  const safecharge = new SafeCharge( options );
-  safecharge.getPaymentURL(createSafeChargePaymentArgs).then( url => {
-    console.log( "url ", url );
-    cb(url);
-  } ).catch ( e => {
-    console.error( "", e );
-  } );
 };
 
+PSP.FinalizePayment = function( sessionToken, uniqueClientId, upoId, orderId, userTokenId, clientRequestId, callback ){
+  console.log("FinalizePayment... orderId = " ,orderId );
+  //PSP.safecharge.getSessionToken().then( session => {
+    console.error( "Got session for Payment ", sessionToken );
+    const opts = {
+      sessionToken: sessionToken, // mandatory
+      transaction: { 
+        orderId: orderId, // mandatory
+        transactionType: 'Sale', // mandatory
+        amount: currentUser.lastOrder.amount,
+        reference: currentUser.lastOrder.reference,
+        currency: currentUser.lastOrder.currency
+      },
+      clientRequestId: clientRequestId, // mandatory
+      clientUniqueId: uniqueClientId,
+      userTokenId: userTokenId,
+      userPaymentOption: {
+        userPaymentOptionId: upoId,
+        CVV: '123'
+      },
+      //isDynamic3D: 1,
+      notificationUrl: 'http://callbacks.coinify.com/safecharge-callback',
+      deviceDetails: {
+        deviceType: 'abc',
+        deviceName: 'asdb',
+        browser: 'Safari',
+        ipAddress: '124.123.123.123',
+        deviceOS: 'OSX'
+      },
+      billingAddress: {
+        firstName: 'John',
+        lastName: 'Doe',
+        country: 'DK',
+        email: 'john.doe@gmail.se',
+      }
+    };
+    console.log( "payment3D..." );
+    PSP.safecharge.payment3D( opts ).then( payment3DResponse => {
+      console.log( "payment3DResponse ", payment3DResponse );
+      if ( callback ) {
+        callback( payment3DResponse );
+      }
+    } );    
 
+ // } ).catch ( e => {
+   // console.error( "ERROR ", e );
+  //} );
+};
 
 
 
@@ -418,7 +409,7 @@ app.get('/', function(req, res) {
   res.send('Hello World!');
 });
 
-app.get('/me/trader/storeCardPayload', function(req, res) {
+app.get('/cards/storeCardPayload', function(req, res) {
   PSP.GetStoreCardPayload( payload => {
     res.send( {
       payload: payload,
@@ -427,7 +418,7 @@ app.get('/me/trader/storeCardPayload', function(req, res) {
   } );
 });
 
-app.post( '/me/trader/cards', function( req, res ) {
+app.post( '/cards', function( req, res ) {
   if ( !req.body.sessionToken ) {
     res.json( {error: 'nosession' } );
     return;
@@ -437,7 +428,14 @@ app.post( '/me/trader/cards', function( req, res ) {
   });
 } );
 
-app.get( '/me/trader/cards', function( req, res) {
+app.delete( '/cards', function( req, res ) {
+  console.log( "TODO: Delete a card... Id:", req.body.cardId );
+  /*PSP.DeleteCard( req.body.sessionToken, req.body.ccTempToken, currentUser.userTokenId, currentUser.clientRequestId, (saveCardRet) => {
+    res.json( saveCardRet );
+  });*/
+} );
+
+app.get( '/cards', function( req, res) {
   PSP.GetSavedCards( _cards => {
     res.send( {
       cards: _cards
@@ -445,10 +443,17 @@ app.get( '/me/trader/cards', function( req, res) {
   } );
 } );
 
-app.post( '/me/trader/cards/pay', function( req, res) {
-  PSP.Payment( req.body.upo, resp => {
-    res.send( resp );
-  } );
+
+app.post( '/cards/finalizePayment', function( req, res ) {
+  if ( !req.body.sessionToken ) {
+    res.json( {error: 'nosession' } );
+    return;
+  }
+  console.log( "finalizePayment req.body ", req.body );
+  PSP.FinalizePayment( req.body.sessionToken, req.body.clientUniqueId, req.body.upoId, req.body.orderId, currentUser.userTokenId, currentUser.clientRequestId, (saveCardRet) => {
+    console.log( "FinalizePayment RESULT ", saveCardRet );
+    res.json( saveCardRet );
+  });
 } );
 
 app.post('/auth', (req, res) => {
@@ -1020,67 +1025,57 @@ app.get('/trades/:tradeId(\\d+)', (req, res) => {
 app.post('/trades', (req, res) => {
   console.log('/trades POST request:', req.body);
 
-  // Test for rejecting bitcoin address. All other than 'aa' will be accepted
-  if (req.body.transferOut.details.account === 'aa') {
-    return res.status(403).send({
-      error: 'invalid_blockchain_account',
-      error_description: 'Blockchain account not valid'
-    });
-  }
+  // We are staring a trade with a specific card id.
+  if ( req.body.transferIn.details.cardId ) {
+    console.log( "CreatePayment..." );
+    PSP.CreatePayment( req.body.transferIn.details.cardId, (resp) => {
+      console.log( "CreatePayment... Response", resp );
 
-  const bearerToken = req && req.headers && req.headers.authorization ? req.headers.authorization : undefined;
-  if ( !bearerToken ) {
-    console.log( "missing bearer token" );
-    res.sendStatus(404);
+      const dateRightNow = Date.now();
+      const tradeCreateDate = dateRightNow;
+
+      // Default trade created
+      const data = {
+        "id": 113475347,
+        "traderId": 754035,
+        "state": "awaiting_transfer_in",
+        "inCurrency": "EUR",
+        "outCurrency": "BTC",
+        "inAmount": -1000.00,
+        "outAmountExpected": 2.41526674,
+        "transferIn": {
+          "id": 4433662222,
+          "currency": "EUR",
+          "sendAmount": 1000.00,
+          "receiveAmount": 1000.00,
+          "medium": "card",
+          "details": resp
+        },
+        "transferOut": {
+          "id": 4433662233,
+          "currency": "BTC",
+          "medium": "blockchain",
+          "sendAmount": 2.41526674,
+          "receiveAmount": 2.41526674,
+          "details": {
+            // Trader's bitcoin address that will receive BTC if trade completes
+            "account": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+          }
+        },
+        "quoteExpireTime": new Date(dateRightNow + 15 * 60000).toJSON(), // Now plus 15 minutes
+        "updateTime": new Date(dateRightNow).toJSON(),
+        "createTime": new Date(dateRightNow).toJSON()
+      };
+
+      console.log( "!!!!!!SENDING RESPONSE TO CLIENT!!!!!!!!");
+      res.send( data );
+
+    } );
     return;
   }
+  throw new Error("Invalid request");
+  console.error("no card id in request.");
 
-  const dateRightNow = Date.now();
-  tradeCreateDate = dateRightNow;
-
-  // Special trade with SafeCharge as provider (set bitcoin payout address as "safecharge")
-  if (req.body.transferOut.details.account === 'safecharge' || bearerToken == "Bearer test safecharge") {
-    const scTrade = TradeManager.createSafeChargeTrade();
-    res.send( scTrade );
-    return;
-  }
-
-  // Default trade created
-  const data = {
-    "id": 113475347,
-    "traderId": 754035,
-    "state": "awaiting_transfer_in",
-    "inCurrency": "EUR",
-    "outCurrency": "BTC",
-    "inAmount": -1000.00,
-    "outAmountExpected": 2.41526674,
-    "transferIn": {
-      "id": 4433662222,
-      "currency": "EUR",
-      "sendAmount": 1000.00,
-      "receiveAmount": 1000.00,
-      "medium": "card",
-      "details": {
-        "paymentId": "c853344d-9092-4ccf-8c18-5dfd3fca9417",
-        "redirectUrl": "some_url2"
-      }
-    },
-    "transferOut": {
-      "id": 4433662233,
-      "currency": "BTC",
-      "medium": "blockchain",
-      "sendAmount": 2.41526674,
-      "receiveAmount": 2.41526674,
-      "details": {
-        // Trader's bitcoin address that will receive BTC if trade completes
-        "account": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
-      }
-    },
-    "quoteExpireTime": new Date(dateRightNow + 15 * 60000).toJSON(), // Now plus 15 minutes
-    "updateTime": new Date(dateRightNow).toJSON(),
-    "createTime": new Date(dateRightNow).toJSON()
-  };
-  res.send( data );
 });
 
 app.get('/trades', (req, res) => {

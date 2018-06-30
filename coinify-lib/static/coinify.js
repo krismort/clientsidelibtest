@@ -116,14 +116,50 @@ console.log("*** Coinify library ***");
     return o;
   };
 
-  window.Coinify.create3DSFrame = ( url, PARequest, iframeCallbackUrl ) => {
+  window.Coinify.createLoadingOverlay = () => {
+    if ( window.Coinify.loadingOverlay ) {
+      return window.Coinify.loadingOverlay;
+    }
+    console.log( "Creating overlay" );
+    const o = window.Coinify.loadingOverlay = document.createElement( 'div' );
+    o.className = "c-working-overlay c-is-hidden";
+    o.id = "c-working-overlay";
+    const body = document.getElementsByTagName('body')[0];
+
+    body.appendChild( o );
+    const css = `
+      .c-working-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.6);
+        z-index: 15000000;
+      }
+    `;
+    const style = document.createElement('style');
+    style.type = 'text/css';
+    if ( style.styleSheet ) {
+      style.styleSheet.cssText = css;
+    } else {
+      style.appendChild( document.createTextNode(css) );
+    }
+    const head = document.head || document.getElementsByTagName('head')[0];
+    (head || body).appendChild(style);
+    return o;
+  };
+
+  window.Coinify.create3DSFrame = ( url, PARequest, iframeCallbackUrl, cb ) => {
     let o = window.Coinify.container3ds;
+
     if ( !o ) {
-      o = window.Coinify.container3ds = document.createElement( 'div' );
       const body = document.getElementsByTagName('body')[0];
+      o = window.Coinify.container3ds = document.createElement( 'div' );
+      o.style.backgroundColor = "white";
       const form = window.Coinify.container3dsForm = document.createElement( 'form' );
-      const i1 = window.Coinify.container3dsi1 = document.createElement( 'form' );
-      const i2 = window.Coinify.container3dsi2 = document.createElement( 'form' );
+      const i1 = window.Coinify.container3dsi1 = document.createElement( 'input' );
+      const i2 = window.Coinify.container3dsi2 = document.createElement( 'input' );
       const _iframe = window.Coinify.container3dsFrame = document.createElement( 'iframe' );
 
       o.className = "c-stretch";
@@ -132,6 +168,7 @@ console.log("*** Coinify library ***");
       form.setAttribute("method", "post");
       _iframe.setAttribute("name", "coinify-3dsframe");
       _iframe.className = "c-stretch";
+
       i1.setAttribute("type", "hidden");
       i1.setAttribute("name", "PaReq");
       i2.setAttribute("type", "hidden");
@@ -146,19 +183,47 @@ console.log("*** Coinify library ***");
     window.Coinify.container3dsForm.setAttribute("action", url);
     window.Coinify.container3dsi1.setAttribute("value", PARequest);
     window.Coinify.container3dsi2.setAttribute("value", iframeCallbackUrl );
-    console.log("submit");
+    //console.log("submit paRequest:" + PARequest + " url:" + url );
+
+    var callback = cb;
+    let eventHandler;
+    eventHandler = ( event ) => {
+      const data = event.data ? event.data.toString() : '';
+      if ( data.indexOf( '[SC-Embed]' ) != 0 ) {
+        return;
+      }
+      window.removeEventListener( "message", eventHandler );
+      const msg = JSON.parse( event.data.replace( '[SC-Embed]', '' ) );
+      console.log( "msg ", msg );
+      if ( msg.command == 'close' ) {
+        if ( o.parentNode ) {
+          o.parentNode.removeChild( o );
+          if ( Coinify.containerIsOverlay ) {
+            Coinify.showOverlay(false);
+          }
+        }
+        if ( callback ) {
+          callback( msg.param );
+          callback = undefined;
+        }
+      }
+    };
+    window.addEventListener( "message", eventHandler, true );
+
     setTimeout( () => {
       window.Coinify.container3dsForm.submit();
     } );
+
     return o;
   }
 
-  window.Coinify.createPaymentFrame = ( url ) => {
+  window.Coinify.createPaymentFrame = ( url, cb ) => {
     let o = window.Coinify.containerPay;
+  
     if ( !o ) {
+      const body = document.getElementsByTagName('body')[0];
       o = window.Coinify.containerPay = document.createElement( 'div' );
       o.className = "c-stretch";
-      const body = document.getElementsByTagName('body')[0];
       const _iframe = document.createElement( 'iframe' );
       _iframe.setAttribute("id", "redirect-pay");
       _iframe.setAttribute("name", "coinify-paymentframe");
@@ -167,6 +232,33 @@ console.log("*** Coinify library ***");
       o.appendChild( _iframe );
       body.appendChild( o );
     }
+
+    let callback = cb;
+    let eventHandler;
+    eventHandler = ( event ) => {
+      //console.log("eventHandler ", event );
+      const data = event.data ? event.data.toString() : '';
+      if ( data.indexOf( '[SC-Embed]' ) != 0 ) {
+        return;
+      }
+      window.removeEventListener( "message", eventHandler );
+      const msg = JSON.parse( data.replace( '[SC-Embed]', '' ) );
+      // console.log( "msg ", msg );
+      if ( msg.command == 'close' ) {
+        if ( o.parentNode ) {
+          o.parentNode.removeChild( o );
+          if ( Coinify.containerIsOverlay ) {
+            Coinify.showOverlay(false);
+          }
+        }
+        if ( callback ) {
+          callback( msg.param );
+          callback = undefined;
+        }
+      }
+    };
+    window.addEventListener( "message", eventHandler, true );
+
     return o;
   }
 
@@ -177,6 +269,15 @@ console.log("*** Coinify library ***");
       if ( container ) {
         container.appendChild( overlay );
       }
+    } else {
+      overlay.classList.add("c-is-hidden");
+    }
+  };
+
+  window.Coinify.showLoadingOverlay = ( value ) => {
+    const overlay = window.Coinify.createLoadingOverlay();
+    if ( value || value === undefined ) {
+      overlay.classList.remove("c-is-hidden");
     } else {
       overlay.classList.add("c-is-hidden");
     }
@@ -239,18 +340,20 @@ console.log("*** Coinify library ***");
     if ( !pspType ) {
       throw new Error( 'Invalid psp: ' + pspType );
     }
+    Coinify.containerIsOverlay = false;
     if ( !container ) {
       container = Coinify.createOverlay();
+      Coinify.containerIsOverlay = true;
       Coinify.showOverlay();
     }
     return new Promise( (cb, reject) => {
       let frame;
       if ( urlData.is3DS ) {
         const callbackUrl = urlData.callbackUrl || window.Coinify.callbackUrl3DS;
-        frame = window.Coinify.create3DSFrame( urlData.url, urlData.PaReq, callbackUrl );
+        frame = window.Coinify.create3DSFrame( urlData.url, urlData.PaReq, callbackUrl, cb );
       } else {
         const callbackUrl = urlData.callbackUrl || window.Coinify.callbackUrlPayment;
-        frame = window.Coinify.createPaymentFrame( urlData.url );
+        frame = window.Coinify.createPaymentFrame( urlData.url, cb );
       }
       container.appendChild(frame);
     });

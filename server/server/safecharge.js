@@ -364,7 +364,8 @@ SafeCharge.prototype.dynamic3D = async function dynamic3D(arrDynamic3DParams) {
     !arrDynamic3DParams.transaction.reference || !arrDynamic3DParams.deviceDetails.browser || !arrDynamic3DParams.deviceDetails.ipAddress ||
     !arrDynamic3DParams.billingAddress.firstName || !arrDynamic3DParams.billingAddress.lastName || !arrDynamic3DParams.billingAddress.country || !arrDynamic3DParams.billingAddress.email
   ) {
-    throw new Error('Params are missing');
+    console.error("Params for dynamic3D are missing; ", arrDynamic3DParams );
+    throw new Error('Params are missing ' );
   }
 
   const TIMESTAMP = dt.format('YmdHMS').toString();
@@ -532,8 +533,8 @@ SafeCharge.prototype.payment3D = async function payment3D(arrPayment3DParams) {
     !arrPayment3DParams.transaction.reference || !arrPayment3DParams.deviceDetails.browser ||
     !arrPayment3DParams.transaction.transactionType || !arrPayment3DParams.deviceDetails.ipAddress ||
     !arrPayment3DParams.billingAddress.firstName || !arrPayment3DParams.billingAddress.lastName ||
-    !arrPayment3DParams.billingAddress.country || !arrPayment3DParams.billingAddress.email
-
+    !arrPayment3DParams.billingAddress.country || !arrPayment3DParams.billingAddress.email ||
+    !arrPayment3DParams.userPaymentOption || !arrPayment3DParams.userTokenId
   ) {
     throw new Error('Params are missing');
   }
@@ -545,6 +546,7 @@ SafeCharge.prototype.payment3D = async function payment3D(arrPayment3DParams) {
   let optionsPayment3D;
 
   if (!arrPayment3DParams.userPaymentOption || !arrPayment3DParams.userPaymentOption.userPaymentOptionId || !arrPayment3DParams.userPaymentOption.CVV) {
+    throw new Error( "Should not be called - KM says");
     optionsPayment3D = {
       method: 'POST',
       url: 'https://' + this.config.merchantHostURL + '/ppp/api/v1/payment3D.do',
@@ -605,61 +607,63 @@ SafeCharge.prototype.payment3D = async function payment3D(arrPayment3DParams) {
       json: true
     };
   } else {
+    const args = {
+      sessionToken: arrPayment3DParams.sessionToken, //received by dynamic 3D response
+      orderId: arrPayment3DParams.transaction.orderId, //received by dynamic 3D response
+      merchantId: this.config.merchantId,
+      merchantSiteId: this.config.merchantSiteId,
+      userTokenId: arrPayment3DParams.userTokenId,
+      clientUniqueId: arrPayment3DParams.clientUniqueId, //received by dynamic 3D response
+      clientRequestId: arrPayment3DParams.clientRequestId, //received by dynamic 3D response
+      transactionType: arrPayment3DParams.transaction.transactionType, // Auth ,Sale
+      paResponse: arrPayment3DParams.transaction.paResponse, // Paresponse received on url by submition of pa Request
+      currency: arrPayment3DParams.transaction.currency, // currency will be
+      amount: arrPayment3DParams.transaction.amount,
+      amountDetails: { //amount detail
+        totalShipping: 0,
+        totalHandling: 0,
+        totalDiscount: 0,
+        totalTax: 0
+      },
+      items: [{
+        name: arrPayment3DParams.transaction.reference, //payment reference
+        price: arrPayment3DParams.transaction.amount, //amount
+        quantity: 1
+      }],
+      deviceDetails: { // Device detail
+        deviceType: arrPayment3DParams.deviceDetails.deviceType,
+        deviceName: arrPayment3DParams.deviceDetails.deviceName,
+        deviceOS: arrPayment3DParams.deviceDetails.deviceOS,
+        browser: arrPayment3DParams.deviceDetails.browser,
+        ipAddress: arrPayment3DParams.deviceDetails.ipAddress
+      },
+      billingAddress: { //user billing detail
+        firstName: arrPayment3DParams.billingAddress.firstName,
+        lastName: arrPayment3DParams.billingAddress.lastName,
+        country: arrPayment3DParams.billingAddress.country,
+        email: arrPayment3DParams.billingAddress.email
+      },
+      userPaymentOption: {
+        userPaymentOptionId: arrPayment3DParams.userPaymentOption.userPaymentOptionId,
+        CVV: arrPayment3DParams.userPaymentOption.CVV
+      },
+      urlDetails: { // notify url Detail
+        notificationUrl: arrPayment3DParams.notificationUrl
+      },
+      merchantDetails: {
+        customField1: arrPayment3DParams.clientUniqueId
+      },
+      timeStamp: TIMESTAMP, //current Timestamp detail
+      checksum: calculateChecksum(arrayParam3DToken)
+    };
+    console.log( "ARGS ", args );
     optionsPayment3D = {
       method: 'POST',
       url: 'https://' + this.config.merchantHostURL + '/ppp/api/v1/payment3D.do',
       headers: {
         'content-type': 'application/json'
       },
-      body: {
-        sessionToken: arrPayment3DParams.sessionToken, //received by dynamic 3D response
-        orderId: arrPayment3DParams.transaction.orderId, //received by dynamic 3D response
-        merchantId: this.config.merchantId,
-        merchantSiteId: this.config.merchantSiteId,
-        userTokenId: arrPayment3DParams.userTokenId,
-        clientUniqueId: arrPayment3DParams.clientUniqueId, //received by dynamic 3D response
-        clientRequestId: arrPayment3DParams.clientRequestId, //received by dynamic 3D response
-        transactionType: arrPayment3DParams.transaction.transactionType, // Auth ,Sale
-        paResponse: arrPayment3DParams.transaction.paResponse, // Paresponse received on url by submition of pa Request
-        currency: arrPayment3DParams.transaction.currency, // currency will be
-        amount: arrPayment3DParams.transaction.amount,
-        amountDetails: { //amount detail
-          totalShipping: 0,
-          totalHandling: 0,
-          totalDiscount: 0,
-          totalTax: 0
-        },
-        items: [{
-          name: arrPayment3DParams.transaction.reference, //payment reference
-          price: arrPayment3DParams.transaction.amount, //amount
-          quantity: 1
-        }],
-        deviceDetails: { // Device detail
-          deviceType: arrPayment3DParams.deviceDetails.deviceType,
-          deviceName: arrPayment3DParams.deviceDetails.deviceName,
-          deviceOS: arrPayment3DParams.deviceDetails.deviceOS,
-          browser: arrPayment3DParams.deviceDetails.browser,
-          ipAddress: arrPayment3DParams.deviceDetails.ipAddress
-        },
-        billingAddress: { //user billing detail
-          firstName: arrPayment3DParams.billingAddress.firstName,
-          lastName: arrPayment3DParams.billingAddress.lastName,
-          country: arrPayment3DParams.billingAddress.country,
-          email: arrPayment3DParams.billingAddress.email
-        },
-        userPaymentOption: {
-          userPaymentOptionId: arrPayment3DParams.userPaymentOption.userPaymentOptionId,
-          CVV: arrPayment3DParams.userPaymentOption.CVV
-        },
-        urlDetails: { // notify url Detail
-          notificationUrl: arrPayment3DParams.notificationUrl
-        },
-        merchantDetails: {
-          customField1: arrPayment3DParams.clientUniqueId
-        },
-        timeStamp: TIMESTAMP, //current Timestamp detail
-        checksum: calculateChecksum(arrayParam3DToken)
-      },
+      body: args,
       json: true
     };
   }
