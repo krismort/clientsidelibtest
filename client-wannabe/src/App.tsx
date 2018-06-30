@@ -73,7 +73,7 @@ class App extends React.Component {
   }
 
   public getSavedCards( cb: any ) {
-    axios.get('https://localhost:8087/cards').then( response => {
+    axios.get('http://localhost:8087/cards').then( response => {
       console.log( "get cards RESPONSE ", response.data );
       cb( response.data );
     } );
